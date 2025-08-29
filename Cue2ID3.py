@@ -240,6 +240,10 @@ class MainWindow(tk.Tk):
         self.entry_folder.grid(row=3, column=1, padx=10, pady=10)
         self.btn_folder.grid(row=3, column=2, padx=10, pady=10)
         self.chk_recursive.grid(row=3, column=3, padx=10, pady=10)
+        # Prepopulate folder entry with script directory
+        import os
+        default_dir = os.path.dirname(os.path.abspath(__file__))
+        self.entry_folder.insert(0, default_dir)
         self.label_folder.grid_remove()
         self.entry_folder.grid_remove()
         self.btn_folder.grid_remove()
@@ -301,7 +305,9 @@ class MainWindow(tk.Tk):
             self.entry_cue.insert(0, cue_default)
 
     def browse_folder(self):
-        folder = filedialog.askdirectory(title="Select Folder")
+        import os
+        default_dir = os.path.dirname(os.path.abspath(__file__))
+        folder = filedialog.askdirectory(title="Select Folder", initialdir=default_dir)
         if folder:
             self.entry_folder.delete(0, tk.END)
             self.entry_folder.insert(0, folder)
@@ -329,8 +335,12 @@ class MainWindow(tk.Tk):
             if not pairs:
                 messagebox.showinfo("No Files", "No suitable MP3/CUE pairs found in folder{}.".format(" and subfolders" if recursive else ""))
                 return
-            # Show preview popup
-            preview = "The following files will be processed:\n\n" + "\n".join([f"MP3: {mp3}\nCUE: {cue}" for mp3, cue in pairs])
+            # Show preview popup (one entry per pair, MP3 with / .cue)
+            preview_list = []
+            for mp3, cue in pairs:
+                base = os.path.basename(mp3)
+                preview_list.append(f"{base} / .cue")
+            preview = "The following files will be processed:\n\n" + "\n".join(preview_list)
             if not messagebox.askokcancel("Confirm Files to Process", preview):
                 return
             # Process and collect files to delete
