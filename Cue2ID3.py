@@ -324,9 +324,45 @@ class MainWindow(tk.Tk):
             if not folder_path:
                 messagebox.showwarning("Missing Folder", "Please select a folder.")
                 return
-            # Process all MP3/CUE pairs in the selected folder.
-            process_folder(folder_path, recursive=recursive)
-            messagebox.showinfo("Success", "Processing of folder complete.")
+            # Collect all MP3/CUE pairs first
+            pairs = self.collect_mp3_cue_pairs(folder_path, recursive)
+            if not pairs:
+                messagebox.showinfo("No Files", "No suitable MP3/CUE pairs found in folder{}.".format(" and subfolders" if recursive else ""))
+                return
+            # Show preview popup
+            preview = "The following files will be processed:\n\n" + "\n".join([f"MP3: {mp3}\nCUE: {cue}" for mp3, cue in pairs])
+            if not messagebox.askokcancel("Confirm Files to Process", preview):
+                return
+            # Process and collect files to delete
+            files_to_delete = process_folder_with_deletion(pairs)
+            if files_to_delete:
+                delist = "The following files are ready to be deleted after processing:\n\n" + "\n".join(files_to_delete)
+                if messagebox.askyesno("Delete Files?", delist + "\n\nDo you want to delete these files?"):
+                    for f in files_to_delete:
+                        try:
+                            os.remove(f)
+                        except Exception as e:
+                            print(f"Error deleting {f}: {e}")
+            messagebox.showinfo("Done", "Processing of folder complete.")
+
+    def collect_mp3_cue_pairs(self, folder_path, recursive):
+        pairs = []
+        if recursive:
+            for root, dirs, files in os.walk(folder_path):
+                for filename in files:
+                    if filename.lower().endswith(".mp3"):
+                        mp3_full = os.path.join(root, filename)
+                        cue_full = mp3_full + ".cue"
+                        if os.path.exists(cue_full):
+                            pairs.append((mp3_full, cue_full))
+        else:
+            for filename in os.listdir(folder_path):
+                if filename.lower().endswith(".mp3"):
+                    mp3_full = os.path.join(folder_path, filename)
+                    cue_full = mp3_full + ".cue"
+                    if os.path.exists(cue_full):
+                        pairs.append((mp3_full, cue_full))
+        return pairs
 
 def process_files(cue_path, mp3_path):
     """
@@ -352,37 +388,27 @@ def process_files(cue_path, mp3_path):
         print("Error during processing:", e)
         return False
 
-def process_folder(folder_path, recursive=False):
-    """
-    Processes all MP3 files in a given folder (optionally recursively).
-    For each MP3, it expects a corresponding CUE file with the same base name.
-    """
-    processed_any = False
-    if recursive:
-        for root, dirs, files in os.walk(folder_path):
-            for filename in files:
-                if filename.lower().endswith(".mp3"):
-                    mp3_full = os.path.join(root, filename)
-                    cue_full = mp3_full + ".cue"
-                    if os.path.exists(cue_full):
-                        print(f"Processing:\n  MP3: {mp3_full}\n  CUE: {cue_full}")
-                        process_files(cue_full, mp3_full)
-                        processed_any = True
-                    else:
-                        print(f"Warning: No CUE file for {mp3_full}")
-    else:
-        for filename in os.listdir(folder_path):
-            if filename.lower().endswith(".mp3"):
-                mp3_full = os.path.join(folder_path, filename)
-                cue_full = mp3_full + ".cue"
-                if os.path.exists(cue_full):
-                    print(f"Processing:\n  MP3: {mp3_full}\n  CUE: {cue_full}")
-                    process_files(cue_full, mp3_full)
-                    processed_any = True
-                else:
-                    print(f"Warning: No CUE file for {mp3_full}")
-    if not processed_any:
-        print("No suitable MP3/CUE pairs found in folder{}.".format(" and subfolders" if recursive else ""))
+# New function for folder processing with deletion preview
+def process_folder_with_deletion(pairs):
+    files_to_delete = []
+    for mp3_full, cue_full in pairs:
+        print(f"Processing:\n  MP3: {mp3_full}\n  CUE: {cue_full}")
+        backup_file = None
+        try:
+            chapters = parse_cue_file(cue_full)
+            if not chapters:
+                print(f"No chapters found in {cue_full}")
+                continue
+            backup_file = embed_chapters(mp3_full, chapters)
+        except Exception as e:
+            print(f"Error processing {mp3_full} and {cue_full}: {e}")
+            continue
+        # Only add files that exist
+        if backup_file and os.path.exists(backup_file):
+            files_to_delete.append(backup_file)
+        if os.path.exists(cue_full):
+            files_to_delete.append(cue_full)
+    return files_to_delete
 
 
 if __name__ == "__main__":
