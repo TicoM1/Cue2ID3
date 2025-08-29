@@ -233,13 +233,17 @@ class MainWindow(tk.Tk):
         self.label_folder = tk.Label(self, text="Folder:")
         self.entry_folder = tk.Entry(self, width=50)
         self.btn_folder = tk.Button(self, text="Browse...", command=self.browse_folder)
+        self.recursive_var = tk.BooleanVar(value=False)
+        self.chk_recursive = tk.Checkbutton(self, text="Recursive (include subfolders)", variable=self.recursive_var)
         # Place them in a row (row 3) but hide initially.
         self.label_folder.grid(row=3, column=0, padx=10, pady=10, sticky="e")
         self.entry_folder.grid(row=3, column=1, padx=10, pady=10)
         self.btn_folder.grid(row=3, column=2, padx=10, pady=10)
+        self.chk_recursive.grid(row=3, column=3, padx=10, pady=10)
         self.label_folder.grid_remove()
         self.entry_folder.grid_remove()
         self.btn_folder.grid_remove()
+        self.chk_recursive.grid_remove()
 
         # Start button.
         self.btn_start = tk.Button(self, text="Start Processing", width=20, command=self.start_processing)
@@ -263,6 +267,7 @@ class MainWindow(tk.Tk):
             self.label_folder.grid_remove()
             self.entry_folder.grid_remove()
             self.btn_folder.grid_remove()
+            self.chk_recursive.grid_remove()
         else:
             # Hide single mode widgets.
             self.label_mp3.grid_remove()
@@ -275,6 +280,7 @@ class MainWindow(tk.Tk):
             self.label_folder.grid()
             self.entry_folder.grid()
             self.btn_folder.grid()
+            self.chk_recursive.grid()
 
     def browse_cue(self):
         path = filedialog.askopenfilename(title="Select CUE File",
@@ -314,11 +320,12 @@ class MainWindow(tk.Tk):
                 messagebox.showerror("Processing Error", "An error occurred during processing. Check the console for details.")
         else:
             folder_path = self.entry_folder.get().strip()
+            recursive = self.recursive_var.get()
             if not folder_path:
                 messagebox.showwarning("Missing Folder", "Please select a folder.")
                 return
             # Process all MP3/CUE pairs in the selected folder.
-            process_folder(folder_path)
+            process_folder(folder_path, recursive=recursive)
             messagebox.showinfo("Success", "Processing of folder complete.")
 
 def process_files(cue_path, mp3_path):
@@ -345,24 +352,37 @@ def process_files(cue_path, mp3_path):
         print("Error during processing:", e)
         return False
 
-def process_folder(folder_path):
+def process_folder(folder_path, recursive=False):
     """
-    Processes all MP3 files in a given folder.
+    Processes all MP3 files in a given folder (optionally recursively).
     For each MP3, it expects a corresponding CUE file with the same base name.
     """
     processed_any = False
-    for filename in os.listdir(folder_path):
-        if filename.lower().endswith(".mp3"):
-            mp3_full = os.path.join(folder_path, filename)
-            cue_full = mp3_full + ".cue"
-            if os.path.exists(cue_full):
-                print(f"Processing:\n  MP3: {mp3_full}\n  CUE: {cue_full}")
-                process_files(cue_full, mp3_full)
-                processed_any = True
-            else:
-                print(f"Warning: No CUE file for {mp3_full}")
+    if recursive:
+        for root, dirs, files in os.walk(folder_path):
+            for filename in files:
+                if filename.lower().endswith(".mp3"):
+                    mp3_full = os.path.join(root, filename)
+                    cue_full = mp3_full + ".cue"
+                    if os.path.exists(cue_full):
+                        print(f"Processing:\n  MP3: {mp3_full}\n  CUE: {cue_full}")
+                        process_files(cue_full, mp3_full)
+                        processed_any = True
+                    else:
+                        print(f"Warning: No CUE file for {mp3_full}")
+    else:
+        for filename in os.listdir(folder_path):
+            if filename.lower().endswith(".mp3"):
+                mp3_full = os.path.join(folder_path, filename)
+                cue_full = mp3_full + ".cue"
+                if os.path.exists(cue_full):
+                    print(f"Processing:\n  MP3: {mp3_full}\n  CUE: {cue_full}")
+                    process_files(cue_full, mp3_full)
+                    processed_any = True
+                else:
+                    print(f"Warning: No CUE file for {mp3_full}")
     if not processed_any:
-        print("No suitable MP3/CUE pairs found in folder.")
+        print("No suitable MP3/CUE pairs found in folder{}.".format(" and subfolders" if recursive else ""))
 
 
 if __name__ == "__main__":
